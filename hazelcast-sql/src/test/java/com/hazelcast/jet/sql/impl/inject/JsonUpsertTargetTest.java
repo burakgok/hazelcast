@@ -34,14 +34,14 @@ import java.time.OffsetDateTime;
 import static com.hazelcast.internal.util.JavaVersion.JAVA_19;
 import static java.time.ZoneOffset.UTC;
 import static java.util.Collections.emptyMap;
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.Assert.assertEquals;
 
 @RunWith(JUnitParamsRunner.class)
 public class JsonUpsertTargetTest {
 
     @Test
     public void test_set() {
-        UpsertTarget target = new JsonUpsertTarget();
+        UpsertTarget target = new JsonUpsertTarget(null);
         UpsertInjector nullInjector = target.createInjector("null", QueryDataType.OBJECT);
         UpsertInjector objectInjector = target.createInjector("object", QueryDataType.OBJECT);
         UpsertInjector stringInjector = target.createInjector("string", QueryDataType.VARCHAR);
@@ -116,7 +116,7 @@ public class JsonUpsertTargetTest {
                     + ",\"timestampTz\":\"2020-09-09T12:23:34.200Z\""
                     + "}";
         }
-        assertThat(new String((byte[]) json)).isEqualTo(expectedJson);
+        assertEquals(expectedJson, new String((byte[]) json));
     }
 
     @SuppressWarnings("unused")
@@ -144,13 +144,13 @@ public class JsonUpsertTargetTest {
     @Test
     @Parameters(method = "values")
     public void when_typeIsObject_then_allValuesAreAllowed(Object value, String expected) {
-        UpsertTarget target = new JsonUpsertTarget();
+        UpsertTarget target = new JsonUpsertTarget(null);
         UpsertInjector injector = target.createInjector("object", QueryDataType.OBJECT);
 
         target.init();
         injector.set(value);
         Object json = target.conclude();
 
-        assertThat(new String((byte[]) json)).isEqualTo("{\"object\":" + expected + "}");
+        assertEquals("{\"object\":" + expected + "}", new String((byte[]) json));
     }
 }

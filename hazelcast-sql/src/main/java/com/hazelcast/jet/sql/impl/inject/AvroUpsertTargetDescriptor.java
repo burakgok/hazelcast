@@ -37,7 +37,7 @@ public final class AvroUpsertTargetDescriptor implements UpsertTargetDescriptor 
 
     @Override
     public UpsertTarget create(InternalSerializationService serializationService) {
-        return new AvroUpsertTarget(schema);
+        return new AvroUpsertTarget(schema, serializationService);
     }
 
     @Override

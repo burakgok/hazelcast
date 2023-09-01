@@ -20,6 +20,7 @@ import com.fasterxml.jackson.core.JsonFactory;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.hazelcast.internal.serialization.InternalSerializationService;
 import com.hazelcast.sql.impl.QueryException;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
@@ -46,6 +47,10 @@ class JsonUpsertTarget extends UpsertTarget {
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
     private JsonGenerator json;
+
+    JsonUpsertTarget(InternalSerializationService serializationService) {
+        super(serializationService);
+    }
 
     @Override
     public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {

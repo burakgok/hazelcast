@@ -20,6 +20,7 @@ import com.hazelcast.core.HazelcastJsonValue;
 import com.hazelcast.internal.json.Json;
 import com.hazelcast.internal.json.JsonObject;
 import com.hazelcast.internal.json.JsonValue;
+import com.hazelcast.internal.serialization.InternalSerializationService;
 import com.hazelcast.sql.impl.QueryException;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
@@ -39,6 +40,10 @@ import static com.hazelcast.sql.impl.type.QueryDataType.VARCHAR;
 @NotThreadSafe
 class HazelcastJsonUpsertTarget extends UpsertTarget {
     private JsonObject json;
+
+    HazelcastJsonUpsertTarget(InternalSerializationService serializationService) {
+        super(serializationService);
+    }
 
     @Override
     public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {

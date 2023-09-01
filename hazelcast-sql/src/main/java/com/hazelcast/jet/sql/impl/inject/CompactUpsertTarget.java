@@ -16,6 +16,7 @@
 
 package com.hazelcast.jet.sql.impl.inject;
 
+import com.hazelcast.internal.serialization.InternalSerializationService;
 import com.hazelcast.internal.serialization.impl.compact.DeserializedSchemaBoundGenericRecordBuilder;
 import com.hazelcast.internal.serialization.impl.compact.Schema;
 import com.hazelcast.nio.serialization.genericrecord.GenericRecord;
@@ -41,7 +42,8 @@ class CompactUpsertTarget extends UpsertTarget {
 
     private GenericRecordBuilder record;
 
-    CompactUpsertTarget(String typeName, Map<String, Schema> schemas) {
+    CompactUpsertTarget(String typeName, Map<String, Schema> schemas, InternalSerializationService serializationService) {
+        super(serializationService);
         this.typeName = typeName;
         this.schemas = schemas;
     }

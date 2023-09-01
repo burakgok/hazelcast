@@ -16,6 +16,7 @@
 
 package com.hazelcast.jet.sql.impl.inject;
 
+import com.hazelcast.internal.serialization.InternalSerializationService;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
 import javax.annotation.Nullable;
@@ -29,7 +30,8 @@ class PojoUpsertTarget extends AbstractPojoUpsertTarget {
 
     private Object object;
 
-    PojoUpsertTarget(Class<?> typeClass) {
+    PojoUpsertTarget(Class<?> typeClass, InternalSerializationService serializationService) {
+        super(serializationService);
         this.typeClass = typeClass;
     }
 
