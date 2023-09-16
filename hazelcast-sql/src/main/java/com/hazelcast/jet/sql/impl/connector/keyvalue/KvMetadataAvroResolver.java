@@ -102,11 +102,11 @@ public final class KvMetadataAvroResolver implements KvMetadataResolver {
             throw QueryException.error("Column list is required for Avro format");
         }
         Map<QueryPath, MappingField> fieldsByPath = extractFields(userFields, isKey);
-        for (QueryPath path : fieldsByPath.keySet()) {
-            if (path.isTopLevel()) {
-                throw QueryException.error("Cannot use the '" + path + "' field with Avro serialization");
+        fieldsByPath.forEach((path, field) -> {
+            if (path.isTopLevel() && !field.type().isCustomType()) {
+                throw QueryException.error("'" + path + "' field must be used with a user-defined type");
             }
-        }
+        });
 
         Schema schema = getSchemaId(fieldsByPath, schemaJson -> {
             // HazelcastKafkaAvro[De]Serializer obtains the schema from mapping options

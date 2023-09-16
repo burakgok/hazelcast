@@ -656,43 +656,7 @@ public class SqlAvroTest extends KafkaSqlTestSupport {
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_key() {
-        when_explicitTopLevelField_then_fail("__key", "this");
-    }
-
-    @Test
-    public void when_explicitTopLevelField_then_fail_this() {
-        when_explicitTopLevelField_then_fail("this", "__key");
-    }
-
-    private void when_explicitTopLevelField_then_fail(String field, String otherField) {
-        assertThatThrownBy(() ->
-                kafkaMapping("kafka", NAME_SCHEMA, NAME_SCHEMA)
-                        .fields(field + " VARCHAR",
-                                "f VARCHAR EXTERNAL NAME \"" + otherField + ".name\"")
-                        .create())
-                .hasMessage("Cannot use the '" + field + "' field with Avro serialization");
-    }
-
-    @Test
-    public void test_writingToTopLevel() {
-        String name = randomName();
-        kafkaMapping(name, ID_SCHEMA, NAME_SCHEMA)
-                .fields("id INT EXTERNAL NAME \"__key.id\"",
-                        "name VARCHAR")
-                .create();
-
-        assertThatThrownBy(() ->
-                sqlService.execute("INSERT INTO " + name + "(__key, name) VALUES ('{\"id\":1}', null)"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-
-        assertThatThrownBy(() ->
-                sqlService.execute("INSERT INTO " + name + "(id, this) VALUES (1, '{\"name\":\"foo\"}')"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-    }
-
-    @Test
-    public void test_topLevelFieldExtraction() {
+    public void test_topLevelPathExtraction() {
         String name = createRandomTopic();
         kafkaMapping(name, ID_SCHEMA, NAME_SCHEMA)
                 .fields("id INT EXTERNAL NAME \"__key.id\"",
@@ -707,6 +671,65 @@ public class SqlAvroTest extends KafkaSqlTestSupport {
                         new GenericRecordBuilder(ID_SCHEMA).set("id", 1).build(),
                         new GenericRecordBuilder(NAME_SCHEMA).set("name", "Alice").build()
                 ))
+        );
+    }
+
+    @Test
+    public void when_topLevelPathWithoutCustomType_then_fail() {
+        assertThatThrownBy(() ->
+                kafkaMapping("kafka", ID_SCHEMA, NAME_SCHEMA)
+                        .fields("__key INT",
+                                "name VARCHAR EXTERNAL NAME \"this.name\"")
+                        .create())
+                .hasMessage("'__key' field must be used with a user-defined type");
+
+        assertThatThrownBy(() ->
+                kafkaMapping("kafka", ID_SCHEMA, NAME_SCHEMA)
+                        .fields("id INT EXTERNAL NAME \"this.id\"",
+                                "this VARCHAR")
+                        .create())
+                .hasMessage("'this' field must be used with a user-defined type");
+    }
+
+    @Test
+    public void test_explicitTopLevelPath() {
+        new SqlType("PersonId").fields("id INT").create();
+        new SqlType("Person").fields("name VARCHAR").create();
+
+        String name = createRandomTopic();
+        kafkaMapping(name, ID_SCHEMA, NAME_SCHEMA)
+                .fields("__key PersonId",
+                        "this Person")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " VALUES (?, ?)",
+                createRecord(ID_SCHEMA, 1), createRecord(NAME_SCHEMA, "Alice"));
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT (__key).id, (this).name FROM " + name,
+                List.of(new Row(1, "Alice"))
+        );
+    }
+
+    @Test
+    public void test_writingToImplicitTopLevelPath() {
+        String name = createRandomTopic();
+        kafkaMapping(name, ID_SCHEMA, NAME_SCHEMA)
+                .fields("id INT EXTERNAL NAME \"__key.id\"",
+                        "name VARCHAR")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " (__key, name) VALUES (?, ?)",
+                createRecord(ID_SCHEMA, 1), "Alice");
+        sqlService.execute("INSERT INTO " + name + " (id, this) VALUES (?, ?)",
+                2, createRecord(NAME_SCHEMA, "Bob"));
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT * FROM " + name,
+                List.of(
+                        new Row(1, "Alice"),
+                        new Row(2, "Bob")
+                )
         );
     }
 

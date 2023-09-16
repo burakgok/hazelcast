@@ -53,13 +53,12 @@ import java.util.Objects;
 
 import static com.hazelcast.jet.impl.util.Util.getNodeEngine;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.COMPACT_FORMAT;
-import static com.hazelcast.jet.sql.impl.connector.SqlConnector.JAVA_FORMAT;
-import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_CLASS;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_COMPACT_TYPE_NAME;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_FORMAT;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_VALUE_COMPACT_TYPE_NAME;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_VALUE_FORMAT;
 import static com.hazelcast.nio.serialization.genericrecord.GenericRecordBuilder.compact;
+import static com.hazelcast.spi.properties.ClusterProperty.SQL_CUSTOM_TYPES_ENABLED;
 import static java.time.ZoneOffset.UTC;
 import static java.util.Map.entry;
 import static java.util.Spliterator.ORDERED;
@@ -80,6 +79,7 @@ public class SqlCompactTest extends SqlTestSupport {
     public static void setup() {
         Config config = new Config();
         config.getJetConfig().setEnabled(true);
+        config.setProperty(SQL_CUSTOM_TYPES_ENABLED.getName(), "true");
         CompactSerializationConfig compactSerializationConfig =
                 config.getSerializationConfig().getCompactSerializationConfig();
 
@@ -442,38 +442,14 @@ public class SqlCompactTest extends SqlTestSupport {
     }
 
     @Test
-    public void test_writingToTopLevelWhileNestedFieldMapped_implicit() {
-        String mapName = randomName();
-        new SqlMapping(mapName, IMapSqlConnector.class)
-                .fields("__key INT",
-                        "name VARCHAR")
-                .options(OPTION_KEY_FORMAT, JAVA_FORMAT,
-                         OPTION_KEY_CLASS, Integer.class.getName(),
-                         OPTION_VALUE_FORMAT, COMPACT_FORMAT,
-                         OPTION_VALUE_COMPACT_TYPE_NAME, PERSON_TYPE_NAME)
-                .create();
-
-        assertThatThrownBy(() ->
-                sqlService.execute("SINK INTO " + mapName + "(__key, this) VALUES (1, null)"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-
-        client().getSql().execute("SINK INTO " + mapName + " VALUES (1, 'foo')");
-
-        assertRowsAnyOrder(client(),
-                "SELECT __key, this, name FROM " + mapName,
-                List.of(new Row(1, compact(PERSON_TYPE_NAME).setString("name", "foo").build(), "foo"))
-        );
-    }
-
-    @Test
-    public void test_topLevelFieldExtraction() {
+    public void test_topLevelPathExtraction() {
         String name = randomName();
         compactMapping(name, PERSON_ID_TYPE_NAME, PERSON_TYPE_NAME)
                 .fields("id INT EXTERNAL NAME \"__key.id\"",
                         "name VARCHAR")
                 .create();
 
-        client().getSql().execute("SINK INTO " + name + " (id, name) VALUES (1, 'Alice')");
+        sqlService.execute("INSERT INTO " + name + " (id, name) VALUES (1, 'Alice')");
 
         assertRowsAnyOrder(client(),
                 "SELECT __key, this FROM " + name,
@@ -485,22 +461,66 @@ public class SqlCompactTest extends SqlTestSupport {
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_key() {
-        when_explicitTopLevelField_then_fail("__key", "this");
+    public void when_topLevelPathWithoutCustomType_then_fail() {
+        assertThatThrownBy(() ->
+                compactMapping("test", PERSON_ID_TYPE_NAME, PERSON_TYPE_NAME)
+                        .fields("__key INT",
+                                "name VARCHAR EXTERNAL NAME \"this.name\"")
+                        .create())
+                .hasMessage("'__key' field must be used with a user-defined type");
+
+        assertThatThrownBy(() ->
+                compactMapping("test", PERSON_ID_TYPE_NAME, PERSON_TYPE_NAME)
+                        .fields("id INT EXTERNAL NAME \"this.id\"",
+                                "this VARCHAR")
+                        .create())
+                .hasMessage("'this' field must be used with a user-defined type");
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_this() {
-        when_explicitTopLevelField_then_fail("this", "__key");
+    public void test_explicitTopLevelPath() {
+        new SqlType("PersonId").fields("id INT").create();
+        new SqlType("Person").fields("name VARCHAR").create();
+
+        String name = randomName();
+        compactMapping(name, PERSON_ID_TYPE_NAME, PERSON_TYPE_NAME)
+                .fields("__key PersonId",
+                        "this Person")
+                .create();
+
+        GenericRecord id = compact(PERSON_ID_TYPE_NAME).setNullableInt32("id", 1).build();
+        GenericRecord person = compact(PERSON_TYPE_NAME).setString("name", "Alice").build();
+
+        sqlService.execute("INSERT INTO " + name + " VALUES (?, ?)", id, person);
+
+        assertRowsAnyOrder(client(),
+                "SELECT * FROM " + name,
+                List.of(new Row(id, person))
+        );
     }
 
-    private void when_explicitTopLevelField_then_fail(String field, String otherField) {
-        assertThatThrownBy(() ->
-                compactMapping("map", PERSON_ID_TYPE_NAME, PERSON_TYPE_NAME)
-                        .fields(field + " VARCHAR",
-                                "f VARCHAR EXTERNAL NAME \"" + otherField + ".f\"")
-                        .create())
-                .hasMessage("Cannot use the '" + field + "' field with Compact serialization");
+    @Test
+    public void test_writingToImplicitTopLevelPath() {
+        String name = randomName();
+        compactMapping(name, PERSON_ID_TYPE_NAME, PERSON_TYPE_NAME)
+                .fields("id INT EXTERNAL NAME \"__key.id\"",
+                        "name VARCHAR")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " (__key, name) VALUES (?, ?)",
+                compact(PERSON_ID_TYPE_NAME).setNullableInt32("id", 1).build(),
+                "Alice");
+        sqlService.execute("INSERT INTO " + name + " (id, this) VALUES (?, ?)",
+                2,
+                compact(PERSON_TYPE_NAME).setString("name", "Bob").build());
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT * FROM " + name,
+                List.of(
+                        new Row(1, "Alice"),
+                        new Row(2, "Bob")
+                )
+        );
     }
 
     @SuppressWarnings({"OptionalGetWithoutIsPresent", "unchecked", "rawtypes"})

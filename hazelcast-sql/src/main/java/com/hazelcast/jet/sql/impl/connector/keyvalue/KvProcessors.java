@@ -26,9 +26,8 @@ import com.hazelcast.jet.sql.impl.inject.UpsertTargetDescriptor;
 import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 import com.hazelcast.nio.serialization.DataSerializable;
-import com.hazelcast.sql.impl.extract.QueryPath;
 import com.hazelcast.sql.impl.row.JetSqlRow;
-import com.hazelcast.sql.impl.type.QueryDataType;
+import com.hazelcast.sql.impl.schema.TableField;
 import edu.umd.cs.findbugs.annotations.SuppressFBWarnings;
 
 import javax.annotation.Nonnull;
@@ -45,15 +44,13 @@ public final class KvProcessors {
      * {@link JetSqlRow} to an entry represented as {@code Entry<Object, Object>}.
      */
     public static ProcessorSupplier entryProjector(
-            QueryPath[] paths,
-            QueryDataType[] types,
+            List<TableField> fields,
             UpsertTargetDescriptor keyDescriptor,
             UpsertTargetDescriptor valueDescriptor,
             boolean failOnNulls
     ) {
         return new EntryProjectorProcessorSupplier(KvProjector.supplier(
-                paths,
-                types,
+                fields,
                 keyDescriptor,
                 valueDescriptor,
                 failOnNulls

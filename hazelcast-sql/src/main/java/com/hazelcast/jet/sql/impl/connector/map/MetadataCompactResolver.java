@@ -93,8 +93,8 @@ public final class MetadataCompactResolver implements KvMetadataResolver {
         }
         Map<QueryPath, MappingField> fieldsByPath = extractFields(userFields, isKey);
         fieldsByPath.forEach((path, field) -> {
-            if (path.isTopLevel()) {
-                throw QueryException.error("Cannot use the '" + path + "' field with Compact serialization");
+            if (path.isTopLevel() && !field.type().isCustomType()) {
+                throw QueryException.error("'" + path + "' field must be used with a user-defined type");
             }
             if (field.type().getTypeFamily() == QueryDataTypeFamily.OBJECT && !field.type().isCustomType()) {
                 throw QueryException.error("Cannot derive Compact type for '" + field.name() + ":OBJECT'");

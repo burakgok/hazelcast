@@ -46,8 +46,6 @@ import java.util.Objects;
 
 import static com.hazelcast.internal.serialization.impl.portable.PortableGenericRecordBuilder.withDefaults;
 import static com.hazelcast.jet.impl.util.Util.getNodeEngine;
-import static com.hazelcast.jet.sql.impl.connector.SqlConnector.JAVA_FORMAT;
-import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_CLASS;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_CLASS_ID;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_CLASS_VERSION;
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_KEY_FACTORY_ID;
@@ -357,64 +355,84 @@ public class SqlPortableTest extends SqlTestSupport {
     }
 
     @Test
-    public void test_writingToTopLevelWhileNestedFieldMapped_implicit() {
-        String mapName = randomName();
-        new SqlMapping(mapName, IMapSqlConnector.class)
-                .fields("__key INT")
-                .fields("name VARCHAR")
-                .options(OPTION_KEY_FORMAT, JAVA_FORMAT,
-                         OPTION_KEY_CLASS, Integer.class.getName(),
-                         OPTION_VALUE_FORMAT, PORTABLE_FORMAT,
-                         OPTION_VALUE_FACTORY_ID, PERSON_FACTORY_ID,
-                         OPTION_VALUE_CLASS_ID, PERSON_CLASS_ID,
-                         OPTION_VALUE_CLASS_VERSION, PERSON_CLASS_VERSION)
-                .create();
-
-        assertThatThrownBy(() ->
-                sqlService.execute("SINK INTO " + mapName + "(__key, this) VALUES (1, null)"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-
-        sqlService.execute("SINK INTO " + mapName + " VALUES (1, 'foo')");
-
-        assertRowsAnyOrder(
-                "SELECT __key, this, name FROM " + mapName,
-                List.of(new Row(1, withDefaults(personClassDefinition).setString("name", "foo").build(), "foo"))
-        );
-    }
-
-    @Test
-    public void test_topLevelFieldExtraction() {
+    public void test_topLevelPathExtraction() {
         String name = randomName();
         portableMapping(name).create();
 
-        sqlService.execute("SINK INTO " + name + " (id, name) VALUES (1, 'Alice')");
+        sqlService.execute("INSERT INTO " + name + " (id, name) VALUES (1, 'Alice')");
 
-        assertRowsEventuallyInAnyOrder(
+        assertRowsAnyOrder(
                 "SELECT __key, this FROM " + name,
                 List.of(new Row(
                         portable(personIdClassDefinition).setInt32("id", 1).build(),
-                        withDefaults(personClassDefinition).setString("name", "Alice").build()
+                        portable(personClassDefinition)
+                                .setInt32("id", 0)
+                                .setString("name", "Alice")
+                                .build()
                 ))
         );
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_key() {
-        when_explicitTopLevelField_then_fail("__key", "this");
+    public void when_topLevelPathWithoutCustomType_then_fail() {
+        assertThatThrownBy(() ->
+                portableMapping("test")
+                        .fields("__key INT",
+                                "name VARCHAR EXTERNAL NAME \"this.name\"")
+                        .create())
+                .hasMessage("'__key' field must be used with a user-defined type");
+
+        assertThatThrownBy(() ->
+                portableMapping("test")
+                        .fields("id INT EXTERNAL NAME \"this.id\"",
+                                "this VARCHAR")
+                        .create())
+                .hasMessage("'this' field must be used with a user-defined type");
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_this() {
-        when_explicitTopLevelField_then_fail("this", "__key");
+    public void test_explicitTopLevelPath() {
+        new SqlType("PersonId").fields("id INT").create();
+        new SqlType("Person").fields("name VARCHAR").create();
+
+        String name = randomName();
+        portableMapping(name)
+                .fields("__key PersonId",
+                        "this Person")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " VALUES (?, ?)",
+                portable(personIdClassDefinition).setInt32("id", 1).build(),
+                withDefaults(personClassDefinition).setString("name", "Alice").build());
+
+        assertRowsAnyOrder(
+                "SELECT (__key).id, (this).name FROM " + name,
+                List.of(new Row(1, "Alice"))
+        );
     }
 
-    private void when_explicitTopLevelField_then_fail(String field, String otherField) {
-        assertThatThrownBy(() ->
-                portableMapping("map")
-                        .fields(field + " VARCHAR",
-                                "f VARCHAR EXTERNAL NAME \"" + otherField + ".f\"")
-                        .create())
-                .hasMessage("Cannot use the '" + field + "' field with Portable serialization");
+    @Test
+    public void test_writingToImplicitTopLevelPath() {
+        String name = randomName();
+        portableMapping(name)
+                .fields("id INT EXTERNAL NAME \"__key.id\"",
+                        "name VARCHAR")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " (__key, name) VALUES (?, ?)",
+                portable(personIdClassDefinition).setInt32("id", 1).build(),
+                "Alice");
+        sqlService.execute("INSERT INTO " + name + " (id, this) VALUES (?, ?)",
+                2,
+                withDefaults(personClassDefinition).setString("name", "Bob").build());
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT * FROM " + name,
+                List.of(
+                        new Row(1, "Alice"),
+                        new Row(2, "Bob")
+                )
+        );
     }
 
     @Test

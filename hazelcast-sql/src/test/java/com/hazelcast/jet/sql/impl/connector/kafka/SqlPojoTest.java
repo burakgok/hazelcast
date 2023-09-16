@@ -47,7 +47,6 @@ import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_VALUE_CLA
 import static com.hazelcast.jet.sql.impl.connector.SqlConnector.OPTION_VALUE_FORMAT;
 import static com.hazelcast.spi.properties.ClusterProperty.SQL_CUSTOM_TYPES_ENABLED;
 import static java.time.ZoneOffset.UTC;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class SqlPojoTest extends KafkaSqlTestSupport {
     private static final int INITIAL_PARTITION_COUNT = 4;
@@ -208,43 +207,7 @@ public class SqlPojoTest extends KafkaSqlTestSupport {
     }
 
     @Test
-    public void test_writingToTopLevelWhileNestedFieldMapped_explicit() {
-        test_writingToTopLevel(true);
-    }
-
-    @Test
-    public void test_writingToTopLevelWhileNestedFieldMapped_implicit() {
-        test_writingToTopLevel(false);
-    }
-
-    public void test_writingToTopLevel(boolean explicit) {
-        String topicName = createRandomTopic();
-        kafkaMapping(topicName, Integer.class, Person.class,
-                        IntegerSerializer.class, IntegerDeserializer.class,
-                        JavaSerializer.class, JavaDeserializer.class)
-                .fields("__key INT")
-                .fieldsIf(explicit, "this OBJECT")
-                .fields("name VARCHAR")
-                .create();
-
-        if (explicit) {
-            assertThatThrownBy(() ->
-                    sqlService.execute("INSERT INTO " + topicName + " VALUES(1, null, 'foo')"))
-                    .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-        }
-
-        assertThatThrownBy(() ->
-                sqlService.execute("INSERT INTO " + topicName + "(__key, this) VALUES(1, null)"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-
-        sqlService.execute("INSERT INTO " + topicName + (explicit ? "(__key, name)" : "") + " VALUES (1, 'foo')");
-
-        assertRowsEventuallyInAnyOrder("SELECT __key, this, name FROM " + topicName,
-                List.of(new Row(1, new Person(null, "foo"), "foo")));
-    }
-
-    @Test
-    public void test_topLevelFieldExtraction() {
+    public void test_topLevelPathExtraction() {
         String name = createRandomTopic();
         kafkaMapping(name, PersonId.class, Person.class,
                         JavaSerializer.class, JavaDeserializer.class,
@@ -256,6 +219,52 @@ public class SqlPojoTest extends KafkaSqlTestSupport {
         assertRowsEventuallyInAnyOrder(
                 "SELECT __key, this FROM " + name,
                 List.of(new Row(new PersonId(1), new Person(null, "Alice")))
+        );
+    }
+
+    @Test
+    public void test_explicitTopLevelPath() {
+        new SqlType("PersonId").fields("id INT").create();
+        new SqlType("Person").fields("name VARCHAR").create();
+
+        String name = createRandomTopic();
+        kafkaMapping(name, PersonId.class, Person.class,
+                        JavaSerializer.class, JavaDeserializer.class,
+                        JavaSerializer.class, JavaDeserializer.class)
+                .fields("__key PersonId",
+                        "this Person")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " VALUES (?, ?)",
+                new PersonId(1), new Person(null, "Alice"));
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT (__key).id, (this).name FROM " + name,
+                List.of(new Row(1, "Alice"))
+        );
+    }
+
+    @Test
+    public void test_writingToImplicitTopLevelPath() {
+        String name = createRandomTopic();
+        kafkaMapping(name, PersonId.class, Person.class,
+                        JavaSerializer.class, JavaDeserializer.class,
+                        JavaSerializer.class, JavaDeserializer.class)
+                .fields("id INT EXTERNAL NAME \"__key.id\"",
+                        "name VARCHAR")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " (__key, name) VALUES (?, ?)",
+                new PersonId(1), "Alice");
+        sqlService.execute("INSERT INTO " + name + " (id, this) VALUES (?, ?)",
+                2, new Person(null, "Bob"));
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT * FROM " + name,
+                List.of(
+                        new Row(1, "Alice"),
+                        new Row(2, "Bob")
+                )
         );
     }
 

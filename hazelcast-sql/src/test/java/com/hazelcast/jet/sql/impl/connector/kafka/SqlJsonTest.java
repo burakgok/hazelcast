@@ -204,43 +204,7 @@ public class SqlJsonTest extends KafkaSqlTestSupport {
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_key() {
-        when_explicitTopLevelField_then_fail("__key", "this");
-    }
-
-    @Test
-    public void when_explicitTopLevelField_then_fail_this() {
-        when_explicitTopLevelField_then_fail("this", "__key");
-    }
-
-    private void when_explicitTopLevelField_then_fail(String field, String otherField) {
-        assertThatThrownBy(() ->
-                kafkaMapping("kafka")
-                        .fields(field + " VARCHAR",
-                                "f VARCHAR EXTERNAL NAME \"" + otherField + ".f\"")
-                        .create())
-                .hasMessage("Cannot use '" + field + "' field with JSON serialization");
-    }
-
-    @Test
-    public void test_writingToTopLevel() {
-        String mapName = randomName();
-        kafkaMapping(mapName)
-                .fields("id INT EXTERNAL NAME \"__key.id\"",
-                        "name VARCHAR")
-                .create();
-
-        assertThatThrownBy(() ->
-                sqlService.execute("INSERT INTO " + mapName + "(__key, name) VALUES ('{\"id\":1}', null)"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-
-        assertThatThrownBy(() ->
-                sqlService.execute("INSERT INTO " + mapName + "(id, this) VALUES (1, '{\"name\":\"foo\"}')"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-    }
-
-    @Test
-    public void test_topLevelFieldExtraction() {
+    public void test_topLevelPathExtraction() {
         String name = createRandomTopic();
         kafkaMapping(name)
                 .fields("id INT EXTERNAL NAME \"__key.id\"",
@@ -255,6 +219,45 @@ public class SqlJsonTest extends KafkaSqlTestSupport {
                         Map.of("id", 1),
                         Map.of("name", "Alice")
                 ))
+        );
+    }
+
+    @Test
+    public void when_explicitTopLevelPath_then_fail() {
+        assertThatThrownBy(() ->
+                kafkaMapping("kafka")
+                        .fields("__key INT",
+                                "name VARCHAR EXTERNAL NAME \"this.name\"")
+                        .create())
+                .hasMessage("Cannot use '__key' field with JSON serialization");
+
+        assertThatThrownBy(() ->
+                kafkaMapping("kafka")
+                        .fields("id INT EXTERNAL NAME \"this.id\"",
+                                "this VARCHAR")
+                        .create())
+                .hasMessage("Cannot use 'this' field with JSON serialization");
+    }
+
+    @Test
+    public void test_writingToImplicitTopLevelPath() {
+        String name = randomName();
+        kafkaMapping(name)
+                .fields("id INT EXTERNAL NAME \"__key.id\"",
+                        "name VARCHAR")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " (__key, name) VALUES (?, ?)",
+                Map.of("id", 1), "Alice");
+        sqlService.execute("INSERT INTO " + name + " (id, this) VALUES (?, ?)",
+                2, Map.of("name", "Bob"));
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT * FROM " + name,
+                List.of(
+                        new Row(1, "Alice"),
+                        new Row(2, "Bob")
+                )
         );
     }
 

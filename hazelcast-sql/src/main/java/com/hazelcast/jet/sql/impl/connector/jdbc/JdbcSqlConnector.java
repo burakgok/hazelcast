@@ -42,6 +42,7 @@ import com.hazelcast.sql.impl.schema.Table;
 import com.hazelcast.sql.impl.schema.TableField;
 import com.hazelcast.sql.impl.type.QueryDataType;
 import org.apache.calcite.rex.RexNode;
+import org.apache.calcite.rex.RexUnset;
 import org.apache.calcite.sql.SqlDialect;
 import org.apache.calcite.sql.SqlDialectFactoryImpl;
 import org.apache.calcite.sql.SqlDialects;
@@ -319,6 +320,7 @@ public class JdbcSqlConnector implements SqlConnector {
 
         RexNode rexPredicate = predicate == null ? null : predicate.unwrap(RexNode.class);
         List<RexNode> rexProjection = Util.toList(projection, n -> n.unwrap(RexNode.class));
+        FunctionEx<Object[], Object[]> rowProjection = RexUnset.createRowProjection(rexProjection);
 
         SelectQueryBuilder builder = new SelectQueryBuilder(context.getTable(), dialect, rexPredicate, rexProjection);
 
@@ -329,6 +331,7 @@ public class JdbcSqlConnector implements SqlConnector {
                                 table.getDataConnectionName(),
                                 builder.query(),
                                 builder.parameterPositions(),
+                                rowProjection,
                                 dialect.getClass().getSimpleName()
                         ))
         );

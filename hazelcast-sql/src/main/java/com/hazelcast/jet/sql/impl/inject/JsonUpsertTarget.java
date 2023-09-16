@@ -21,17 +21,17 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.core.TreeNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.hazelcast.internal.serialization.InternalSerializationService;
+import com.hazelcast.jet.sql.impl.connector.keyvalue.KvMetadataResolver.Field;
 import com.hazelcast.sql.impl.QueryException;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.Map;
+import java.util.stream.Stream;
 
 import static com.hazelcast.internal.util.ExceptionUtil.sneakyThrow;
-import static com.hazelcast.jet.sql.impl.inject.UpsertInjector.FAILING_TOP_LEVEL_INJECTOR;
 import static com.hazelcast.sql.impl.type.QueryDataType.BIGINT;
 import static com.hazelcast.sql.impl.type.QueryDataType.BOOLEAN;
 import static com.hazelcast.sql.impl.type.QueryDataType.DOUBLE;
@@ -45,24 +45,33 @@ import static com.hazelcast.sql.impl.type.QueryDataType.VARCHAR;
 class JsonUpsertTarget extends UpsertTarget {
     private static final JsonFactory JSON_FACTORY = new ObjectMapper().getFactory();
 
-    private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    private JsonGenerator json;
-
     JsonUpsertTarget(InternalSerializationService serializationService) {
         super(serializationService);
     }
 
     @Override
-    public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {
-        if (path == null) {
-            return FAILING_TOP_LEVEL_INJECTOR;
-        }
-        Injector<JsonGenerator> injector = createInjector0(path, type);
-        return value -> injector.set(json, value);
+    protected Converter<byte[]> createConverter(Stream<Field> fields) {
+        Injector<JsonGenerator> injector = createRecordInjector(fields,
+                field -> createInjector(field.name(), field.type()));
+        return value -> {
+            if (value == null) {
+                return null;
+            }
+            try (ByteArrayOutputStream baos = new ByteArrayOutputStream();
+                 JsonGenerator json = JSON_FACTORY.createGenerator(baos)) {
+                json.writeStartObject();
+                injector.set(json, value);
+                json.writeEndObject();
+                json.flush();
+                return baos.toByteArray();
+            } catch (IOException e) {
+                throw sneakyThrow(e);
+            }
+        };
     }
 
-    private Injector<JsonGenerator> createInjector0(String path, QueryDataType type) {
-        InjectorEx<JsonGenerator> injector = createInjector1(path, type);
+    private Injector<JsonGenerator> createInjector(String path, QueryDataType type) {
+        InjectorEx<JsonGenerator> injector = createInjector0(path, type);
         return (json, value) -> {
             try {
                 if (value == null) {
@@ -77,7 +86,7 @@ class JsonUpsertTarget extends UpsertTarget {
     }
 
     @SuppressWarnings("ReturnCount")
-    private InjectorEx<JsonGenerator> createInjector1(String path, QueryDataType type) {
+    private InjectorEx<JsonGenerator> createInjector0(String path, QueryDataType type) {
         switch (type.getTypeFamily()) {
             case BOOLEAN:
                 return (json, value) -> json.writeBooleanField(path, (boolean) BOOLEAN.convert(value));
@@ -128,27 +137,5 @@ class JsonUpsertTarget extends UpsertTarget {
             default:
                 throw QueryException.error("Unsupported type: " + type);
         }
-    }
-
-    @Override
-    public void init() {
-        baos.reset();
-        try {
-            json = JSON_FACTORY.createGenerator(baos);
-            json.writeStartObject();
-        } catch (IOException e) {
-            throw sneakyThrow(e);
-        }
-    }
-
-    @Override
-    public Object conclude() {
-        try {
-            json.writeEndObject();
-            json.close();
-        } catch (IOException e) {
-            throw sneakyThrow(e);
-        }
-        return baos.toByteArray();
     }
 }

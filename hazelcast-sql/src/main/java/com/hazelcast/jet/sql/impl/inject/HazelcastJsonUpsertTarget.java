@@ -21,13 +21,13 @@ import com.hazelcast.internal.json.Json;
 import com.hazelcast.internal.json.JsonObject;
 import com.hazelcast.internal.json.JsonValue;
 import com.hazelcast.internal.serialization.InternalSerializationService;
+import com.hazelcast.jet.sql.impl.connector.keyvalue.KvMetadataResolver.Field;
 import com.hazelcast.sql.impl.QueryException;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
-import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
+import java.util.stream.Stream;
 
-import static com.hazelcast.jet.sql.impl.inject.UpsertInjector.FAILING_TOP_LEVEL_INJECTOR;
 import static com.hazelcast.sql.impl.type.QueryDataType.BIGINT;
 import static com.hazelcast.sql.impl.type.QueryDataType.BOOLEAN;
 import static com.hazelcast.sql.impl.type.QueryDataType.DOUBLE;
@@ -39,23 +39,27 @@ import static com.hazelcast.sql.impl.type.QueryDataType.VARCHAR;
 
 @NotThreadSafe
 class HazelcastJsonUpsertTarget extends UpsertTarget {
-    private JsonObject json;
 
     HazelcastJsonUpsertTarget(InternalSerializationService serializationService) {
         super(serializationService);
     }
 
     @Override
-    public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {
-        if (path == null) {
-            return FAILING_TOP_LEVEL_INJECTOR;
-        }
-        Injector<JsonObject> injector = createInjector0(path, type);
-        return value -> injector.set(json, value);
+    protected Converter<HazelcastJsonValue> createConverter(Stream<Field> fields) {
+        Injector<JsonObject> injector = createRecordInjector(fields,
+                field -> createInjector(field.name(), field.type()));
+        return value -> {
+            if (value == null) {
+                return null;
+            }
+            JsonObject json = Json.object();
+            injector.set(json, value);
+            return new HazelcastJsonValue(json.toString());
+        };
     }
 
-    private Injector<JsonObject> createInjector0(String path, QueryDataType type) {
-        Injector<JsonObject> injector = createInjector1(path, type);
+    private Injector<JsonObject> createInjector(String path, QueryDataType type) {
+        Injector<JsonObject> injector = createInjector0(path, type);
         return (json, value) -> {
             if (value == null) {
                 json.add(path, (String) null);
@@ -66,7 +70,7 @@ class HazelcastJsonUpsertTarget extends UpsertTarget {
     }
 
     @SuppressWarnings("checkstyle:ReturnCount")
-    private Injector<JsonObject> createInjector1(String path, QueryDataType type) {
+    private Injector<JsonObject> createInjector0(String path, QueryDataType type) {
         switch (type.getTypeFamily()) {
             case BOOLEAN:
                 return (json, value) -> json.add(path, (boolean) BOOLEAN.convert(value));
@@ -114,17 +118,5 @@ class HazelcastJsonUpsertTarget extends UpsertTarget {
             default:
                 throw QueryException.error("Unsupported type: " + type);
         }
-    }
-
-    @Override
-    public void init() {
-        json = Json.object();
-    }
-
-    @Override
-    public Object conclude() {
-        JsonObject json = this.json;
-        this.json = null;
-        return new HazelcastJsonValue(json.toString());
     }
 }

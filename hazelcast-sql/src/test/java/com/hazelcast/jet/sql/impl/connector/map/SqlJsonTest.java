@@ -182,44 +182,7 @@ public class SqlJsonTest extends SqlTestSupport {
     }
 
     @Test
-    public void when_explicitTopLevelField_then_fail_key() {
-        when_explicitTopLevelField_then_fail("__key", "this");
-    }
-
-    @Test
-    public void when_explicitTopLevelField_then_fail_this() {
-        when_explicitTopLevelField_then_fail("this", "__key");
-    }
-
-    private void when_explicitTopLevelField_then_fail(String field, String otherField) {
-        String name = randomName();
-        assertThatThrownBy(() ->
-                jsonMapping(name)
-                        .fields(field + " VARCHAR",
-                                "f VARCHAR EXTERNAL NAME \"" + otherField + ".f\"")
-                        .create())
-                .hasMessage("Cannot use '" + field + "' field with JSON serialization");
-    }
-
-    @Test
-    public void test_writingToTopLevel() {
-        String mapName = randomName();
-        jsonMapping(mapName)
-                .fields("id INT EXTERNAL NAME \"__key.id\"",
-                        "name VARCHAR")
-                .create();
-
-        assertThatThrownBy(() ->
-                sqlService.execute("SINK INTO " + mapName + "(__key, name) VALUES ('{\"id\":1}', null)"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-
-        assertThatThrownBy(() ->
-                sqlService.execute("SINK INTO " + mapName + "(id, this) VALUES (1, '{\"name\":\"foo\"}')"))
-                .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-    }
-
-    @Test
-    public void test_topLevelFieldExtraction() {
+    public void test_topLevelPathExtraction() {
         String name = randomName();
         jsonMapping(name)
                 .fields("id INT EXTERNAL NAME \"__key.id\"",
@@ -234,6 +197,45 @@ public class SqlJsonTest extends SqlTestSupport {
                         new HazelcastJsonValue("{\"id\":1}"),
                         new HazelcastJsonValue("{\"name\":\"Alice\"}")
                 ))
+        );
+    }
+
+    @Test
+    public void when_explicitTopLevelPath_then_fail() {
+        assertThatThrownBy(() ->
+                jsonMapping("test")
+                        .fields("__key INT",
+                                "name VARCHAR EXTERNAL NAME \"this.name\"")
+                        .create())
+                .hasMessage("Cannot use '__key' field with JSON serialization");
+
+        assertThatThrownBy(() ->
+                jsonMapping("test")
+                        .fields("id INT EXTERNAL NAME \"this.id\"",
+                                "this VARCHAR")
+                        .create())
+                .hasMessage("Cannot use 'this' field with JSON serialization");
+    }
+
+    @Test
+    public void test_writingToImplicitTopLevelPath() {
+        String name = randomName();
+        jsonMapping(name)
+                .fields("id INT EXTERNAL NAME \"__key.id\"",
+                        "name VARCHAR")
+                .create();
+
+        sqlService.execute("INSERT INTO " + name + " (__key, name) VALUES (?, ?)",
+                new HazelcastJsonValue("{\"id\":1}"), "Alice");
+        sqlService.execute("INSERT INTO " + name + " (id, this) VALUES (?, ?)",
+                2, new HazelcastJsonValue("{\"name\":\"Bob\"}"));
+
+        assertRowsEventuallyInAnyOrder(
+                "SELECT * FROM " + name,
+                List.of(
+                        new Row(1, "Alice"),
+                        new Row(2, "Bob")
+                )
         );
     }
 

@@ -1099,7 +1099,7 @@ public class CompactInternalGenericRecord extends CompactGenericRecord implement
     }
 
     @Override
-    protected Object getClassIdentifier() {
+    public Object getClassIdentifier() {
         return schema.getTypeName();
     }
 

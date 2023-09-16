@@ -23,9 +23,7 @@ import com.hazelcast.jet.sql.SqlTestSupport;
 import com.hazelcast.jet.sql.impl.connector.keyvalue.KvProjector;
 import com.hazelcast.jet.sql.impl.inject.PrimitiveUpsertTargetDescriptor;
 import com.hazelcast.sql.impl.QueryException;
-import com.hazelcast.sql.impl.extract.QueryPath;
 import com.hazelcast.sql.impl.row.JetSqlRow;
-import com.hazelcast.sql.impl.type.QueryDataType;
 import org.junit.Before;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -35,7 +33,10 @@ import java.util.Map;
 
 import static com.hazelcast.jet.TestContextSupport.adaptSupplier;
 import static com.hazelcast.jet.impl.JetServiceBackend.SQL_ARGUMENTS_KEY_NAME;
+import static com.hazelcast.jet.sql.impl.inject.UpsertTargetTestSupport.field;
 import static com.hazelcast.query.impl.predicates.PredicateTestUtils.entry;
+import static com.hazelcast.sql.impl.extract.QueryPath.KEY;
+import static com.hazelcast.sql.impl.extract.QueryPath.VALUE;
 import static com.hazelcast.sql.impl.type.QueryDataType.INT;
 import static java.util.Collections.emptyList;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -122,8 +123,7 @@ public class InsertProcessorTest extends SqlTestSupport {
 
     private void executeInsert(Runnable setup, long maxAccumulatedKeys, List<JetSqlRow> rows, List<JetSqlRow> expectedOutput) {
         KvProjector.Supplier projectorSupplier = KvProjector.supplier(
-                new QueryPath[]{QueryPath.KEY_PATH, QueryPath.VALUE_PATH},
-                new QueryDataType[]{INT, INT},
+                List.of(field(KEY, INT), field(VALUE, INT)),
                 PrimitiveUpsertTargetDescriptor.INSTANCE,
                 PrimitiveUpsertTargetDescriptor.INSTANCE,
                 true

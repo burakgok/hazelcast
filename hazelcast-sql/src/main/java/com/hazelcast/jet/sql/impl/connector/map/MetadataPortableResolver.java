@@ -98,11 +98,11 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
             InternalSerializationService serializationService
     ) {
         Map<QueryPath, MappingField> fieldsByPath = extractFields(userFields, isKey);
-        for (QueryPath path : fieldsByPath.keySet()) {
-            if (path.isTopLevel()) {
-                throw QueryException.error("Cannot use the '" + path + "' field with Portable serialization");
+        fieldsByPath.forEach((path, field) -> {
+            if (path.isTopLevel() && !field.type().isCustomType()) {
+                throw QueryException.error("'" + path + "' field must be used with a user-defined type");
             }
-        }
+        });
 
         PortableId portableId = getSchemaId(fieldsByPath, PortableId::new, () -> portableId(options, isKey));
         ClassDefinition classDefinition = serializationService.getPortableContext()
