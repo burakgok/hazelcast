@@ -21,38 +21,32 @@ import com.hazelcast.nio.ObjectDataInput;
 import com.hazelcast.nio.ObjectDataOutput;
 
 import java.io.IOException;
-import java.util.Map;
-import java.util.Objects;
+
+import static com.hazelcast.jet.impl.util.ReflectionUtils.loadClass;
 
 public class PojoUpsertTargetDescriptor implements UpsertTargetDescriptor {
-
-    private String className;
-    private Map<String, String> typeNamesByPaths;
+    private Class<?> typeClass;
 
     @SuppressWarnings("unused")
-    private PojoUpsertTargetDescriptor() {
-    }
+    private PojoUpsertTargetDescriptor() { }
 
-    public PojoUpsertTargetDescriptor(String className, Map<String, String> typeNamesByPaths) {
-        this.className = className;
-        this.typeNamesByPaths = typeNamesByPaths;
+    public PojoUpsertTargetDescriptor(Class<?> typeClass) {
+        this.typeClass = typeClass;
     }
 
     @Override
     public UpsertTarget create(InternalSerializationService serializationService) {
-        return new PojoUpsertTarget(className, typeNamesByPaths);
+        return new PojoUpsertTarget(typeClass);
     }
 
     @Override
     public void writeData(ObjectDataOutput out) throws IOException {
-        out.writeString(className);
-        out.writeObject(typeNamesByPaths);
+        out.writeString(typeClass.getName());
     }
 
     @Override
     public void readData(ObjectDataInput in) throws IOException {
-        className = in.readString();
-        typeNamesByPaths = in.readObject();
+        typeClass = loadClass(in.readString());
     }
 
     @Override
@@ -63,12 +57,11 @@ public class PojoUpsertTargetDescriptor implements UpsertTargetDescriptor {
         if (o == null || getClass() != o.getClass()) {
             return false;
         }
-        PojoUpsertTargetDescriptor that = (PojoUpsertTargetDescriptor) o;
-        return Objects.equals(className, that.className) && Objects.equals(typeNamesByPaths, that.typeNamesByPaths);
+        return typeClass == ((PojoUpsertTargetDescriptor) o).typeClass;
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(className, typeNamesByPaths);
+        return typeClass.hashCode();
     }
 }

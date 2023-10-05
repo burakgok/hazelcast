@@ -357,20 +357,10 @@ public class SqlPortableTest extends SqlTestSupport {
     }
 
     @Test
-    public void test_writingToTopLevelWhileNestedFieldMapped_explicit() {
-        test_writingToTopLevelWhileNestedFieldMapped(true);
-    }
-
-    @Test
     public void test_writingToTopLevelWhileNestedFieldMapped_implicit() {
-        test_writingToTopLevelWhileNestedFieldMapped(false);
-    }
-
-    public void test_writingToTopLevelWhileNestedFieldMapped(boolean explicit) {
         String mapName = randomName();
         new SqlMapping(mapName, IMapSqlConnector.class)
                 .fields("__key INT")
-                .fieldsIf(explicit, "this OBJECT")
                 .fields("name VARCHAR")
                 .options(OPTION_KEY_FORMAT, JAVA_FORMAT,
                          OPTION_KEY_CLASS, Integer.class.getName(),
@@ -380,17 +370,11 @@ public class SqlPortableTest extends SqlTestSupport {
                          OPTION_VALUE_CLASS_VERSION, PERSON_CLASS_VERSION)
                 .create();
 
-        if (explicit) {
-            assertThatThrownBy(() ->
-                    sqlService.execute("SINK INTO " + mapName + " VALUES (1, null, 'foo')"))
-                    .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
-        }
-
         assertThatThrownBy(() ->
                 sqlService.execute("SINK INTO " + mapName + "(__key, this) VALUES (1, null)"))
                 .hasMessageContaining("Writing to top-level fields of type OBJECT not supported");
 
-        sqlService.execute("SINK INTO " + mapName + (explicit ? "(__key, name)" : "") + " VALUES (1, 'foo')");
+        sqlService.execute("SINK INTO " + mapName + " VALUES (1, 'foo')");
 
         assertRowsAnyOrder(
                 "SELECT __key, this, name FROM " + mapName,
@@ -412,6 +396,25 @@ public class SqlPortableTest extends SqlTestSupport {
                         withDefaults(personClassDefinition).setString("name", "Alice").build()
                 ))
         );
+    }
+
+    @Test
+    public void when_explicitTopLevelField_then_fail_key() {
+        when_explicitTopLevelField_then_fail("__key", "this");
+    }
+
+    @Test
+    public void when_explicitTopLevelField_then_fail_this() {
+        when_explicitTopLevelField_then_fail("this", "__key");
+    }
+
+    private void when_explicitTopLevelField_then_fail(String field, String otherField) {
+        assertThatThrownBy(() ->
+                portableMapping("map")
+                        .fields(field + " VARCHAR",
+                                "f VARCHAR EXTERNAL NAME \"" + otherField + ".f\"")
+                        .create())
+                .hasMessage("Cannot use the '" + field + "' field with Portable serialization");
     }
 
     @Test

@@ -106,8 +106,12 @@ public interface KvMetadataResolver {
      * return type fields. Otherwise, return mapping fields without {@code __key} or {@code this}.
      */
     static Stream<Field> getFields(Map<QueryPath, MappingField> fields) {
-        return flatMap(fields, type -> type.getObjectFields().stream().map(Field::new),
-                () -> fields.entrySet().stream().filter(e -> !e.getKey().isTopLevel()).map(Field::new));
+        return flatMap(fields, KvMetadataResolver::getFields, () -> fields.entrySet().stream()
+                .filter(e -> !e.getKey().isTopLevel()).map(Field::new));
+    }
+
+    static Stream<Field> getFields(QueryDataType type) {
+        return type.getObjectFields().stream().map(Field::new);
     }
 
     /**

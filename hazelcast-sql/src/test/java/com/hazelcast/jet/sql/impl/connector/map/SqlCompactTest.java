@@ -139,7 +139,7 @@ public class SqlCompactTest extends SqlTestSupport {
                         .fields("key_id INT",
                                 "object OBJECT")
                         .create())
-                .hasMessageContaining("Cannot derive Compact type for 'OBJECT'");
+                .hasMessageContaining("Cannot derive Compact type for 'object:OBJECT'");
     }
 
     @Test

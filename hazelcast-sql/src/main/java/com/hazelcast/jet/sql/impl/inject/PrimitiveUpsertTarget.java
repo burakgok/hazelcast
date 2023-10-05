@@ -22,7 +22,7 @@ import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 
 @NotThreadSafe
-class PrimitiveUpsertTarget implements UpsertTarget {
+class PrimitiveUpsertTarget extends UpsertTarget {
     private Object object;
 
     @Override

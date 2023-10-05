@@ -28,7 +28,6 @@ import com.hazelcast.sql.impl.extract.QueryPath;
 import com.hazelcast.sql.impl.schema.MappingField;
 import com.hazelcast.sql.impl.schema.map.MapTableField;
 import com.hazelcast.sql.impl.type.QueryDataType;
-import com.hazelcast.sql.impl.type.QueryDataTypeFamily;
 import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
@@ -182,10 +181,9 @@ public class MetadataPortableResolverTest {
                 field("object", QueryDataType.OBJECT, prefix + ".object")
         );
 
-        // TODO: fix portable nested types support?
         assertThatThrownBy(() -> INSTANCE.resolveAndValidateFields(key, fields, options, ss).collect(toList()))
                 .isInstanceOf(QueryException.class)
-                .hasMessageContaining("Cannot derive Portable type for '" + QueryDataTypeFamily.OBJECT + "'");
+                .hasMessageContaining("Cannot derive Portable type for 'object:OBJECT'");
     }
 
     @Test

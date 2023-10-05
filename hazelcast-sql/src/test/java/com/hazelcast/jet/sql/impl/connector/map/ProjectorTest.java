@@ -76,7 +76,7 @@ public class ProjectorTest {
         assertThat(serialized).isEqualToComparingFieldByField(original);
     }
 
-    private static final class MultiplyingTarget implements UpsertTarget {
+    private static final class MultiplyingTarget extends UpsertTarget {
         private Object value = -1;
 
         @Override

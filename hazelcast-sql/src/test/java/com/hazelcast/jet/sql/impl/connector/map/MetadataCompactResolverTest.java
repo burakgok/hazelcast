@@ -31,7 +31,6 @@ import com.hazelcast.sql.impl.extract.QueryPath;
 import com.hazelcast.sql.impl.schema.MappingField;
 import com.hazelcast.sql.impl.schema.map.MapTableField;
 import com.hazelcast.sql.impl.type.QueryDataType;
-import com.hazelcast.sql.impl.type.QueryDataTypeFamily;
 import junitparams.JUnitParamsRunner;
 import junitparams.Parameters;
 import org.junit.Test;
@@ -83,10 +82,9 @@ public class MetadataCompactResolverTest {
 
         List<MappingField> fields = List.of(field("object", QueryDataType.OBJECT, prefix + ".object"));
 
-        // TODO: fix compact nested types support?
         assertThatThrownBy(() -> INSTANCE.resolveAndValidateFields(key, fields, options, ss).collect(toList()))
                 .isInstanceOf(QueryException.class)
-                .hasMessageContaining("Cannot derive Compact type for '" + QueryDataTypeFamily.OBJECT + "'");
+                .hasMessageContaining("Cannot derive Compact type for 'object:OBJECT'");
     }
 
     @Test
@@ -222,7 +220,8 @@ public class MetadataCompactResolverTest {
         schemaWriter.addField(new FieldDescriptor("date", FieldKind.DATE));
         schemaWriter.addField(new FieldDescriptor("timestamp", FieldKind.TIMESTAMP));
         schemaWriter.addField(new FieldDescriptor("timestampTz", FieldKind.TIMESTAMP_WITH_TIMEZONE));
-        assertEquals(metadata.getUpsertTargetDescriptor(), new CompactUpsertTargetDescriptor(schemaWriter.build()));
+        assertEquals(metadata.getUpsertTargetDescriptor(), new CompactUpsertTargetDescriptor(
+                "test", Map.of("test", schemaWriter.build())));
     }
 
     private static InternalSerializationService createSerializationService() {

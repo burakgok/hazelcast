@@ -31,93 +31,97 @@ import java.util.Map;
 
 import static com.hazelcast.internal.util.ExceptionUtil.sneakyThrow;
 import static com.hazelcast.jet.sql.impl.inject.UpsertInjector.FAILING_TOP_LEVEL_INJECTOR;
+import static com.hazelcast.sql.impl.type.QueryDataType.BIGINT;
+import static com.hazelcast.sql.impl.type.QueryDataType.BOOLEAN;
+import static com.hazelcast.sql.impl.type.QueryDataType.DOUBLE;
+import static com.hazelcast.sql.impl.type.QueryDataType.INT;
+import static com.hazelcast.sql.impl.type.QueryDataType.REAL;
+import static com.hazelcast.sql.impl.type.QueryDataType.SMALLINT;
+import static com.hazelcast.sql.impl.type.QueryDataType.TINYINT;
+import static com.hazelcast.sql.impl.type.QueryDataType.VARCHAR;
 
 @NotThreadSafe
-class JsonUpsertTarget implements UpsertTarget {
+class JsonUpsertTarget extends UpsertTarget {
     private static final JsonFactory JSON_FACTORY = new ObjectMapper().getFactory();
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
-    private JsonGenerator generator;
+    private JsonGenerator json;
 
     @Override
-    @SuppressWarnings("checkstyle:ReturnCount")
     public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {
         if (path == null) {
             return FAILING_TOP_LEVEL_INJECTOR;
         }
+        Injector<JsonGenerator> injector = createInjector0(path, type);
+        return value -> injector.set(json, value);
+    }
 
-        return value -> {
+    private Injector<JsonGenerator> createInjector0(String path, QueryDataType type) {
+        InjectorEx<JsonGenerator> injector = createInjector1(path, type);
+        return (json, value) -> {
             try {
                 if (value == null) {
-                    generator.writeNullField(path);
+                    json.writeNullField(path);
                 } else {
-                    switch (type.getTypeFamily()) {
-                        case BOOLEAN:
-                            generator.writeBooleanField(path, (Boolean) value);
-                            break;
-                        case TINYINT:
-                            generator.writeNumberField(path, (Byte) value);
-                            break;
-                        case SMALLINT:
-                            generator.writeNumberField(path, (Short) value);
-                            break;
-                        case INTEGER:
-                            generator.writeNumberField(path, (Integer) value);
-                            break;
-                        case BIGINT:
-                            generator.writeNumberField(path, (Long) value);
-                            break;
-                        case REAL:
-                            generator.writeNumberField(path, (Float) value);
-                            break;
-                        case DOUBLE:
-                            generator.writeNumberField(path, (Double) value);
-                            break;
-                        case DECIMAL:
-                        case TIME:
-                        case DATE:
-                        case TIMESTAMP:
-                        case TIMESTAMP_WITH_TIME_ZONE:
-                        case VARCHAR:
-                            generator.writeStringField(path, (String) QueryDataType.VARCHAR.convert(value));
-                            break;
-                        case OBJECT:
-                            injectObject(path, value);
-                            break;
-                        default:
-                            throw QueryException.error("Unsupported type: " + type);
-                    }
+                    injector.set(json, value);
                 }
-            } catch (IOException e) {
+            } catch (Exception e) {
                 throw sneakyThrow(e);
             }
         };
     }
 
-    private void injectObject(String path, Object value) throws IOException {
-        generator.writeFieldName(path);
-        if (value == null) {
-            generator.writeNull();
-        } else if (value instanceof TreeNode) {
-            generator.writeTree((TreeNode) value);
-        } else if (value instanceof Map) {
-            generator.writeObject(value);
-        } else if (value instanceof Boolean) {
-            generator.writeBoolean((boolean) value);
-        } else if (value instanceof Byte) {
-            generator.writeNumber((byte) value);
-        } else if (value instanceof Short) {
-            generator.writeNumber((short) value);
-        } else if (value instanceof Integer) {
-            generator.writeNumber((int) value);
-        } else if (value instanceof Long) {
-            generator.writeNumber((long) value);
-        } else if (value instanceof Float) {
-            generator.writeNumber((float) value);
-        } else if (value instanceof Double) {
-            generator.writeNumber((double) value);
-        } else {
-            generator.writeString((String) QueryDataType.VARCHAR.convert(value));
+    @SuppressWarnings("ReturnCount")
+    private InjectorEx<JsonGenerator> createInjector1(String path, QueryDataType type) {
+        switch (type.getTypeFamily()) {
+            case BOOLEAN:
+                return (json, value) -> json.writeBooleanField(path, (boolean) BOOLEAN.convert(value));
+            case TINYINT:
+                return (json, value) -> json.writeNumberField(path, (byte) TINYINT.convert(value));
+            case SMALLINT:
+                return (json, value) -> json.writeNumberField(path, (short) SMALLINT.convert(value));
+            case INTEGER:
+                return (json, value) -> json.writeNumberField(path, (int) INT.convert(value));
+            case BIGINT:
+                return (json, value) -> json.writeNumberField(path, (long) BIGINT.convert(value));
+            case REAL:
+                return (json, value) -> json.writeNumberField(path, (float) REAL.convert(value));
+            case DOUBLE:
+                return (json, value) -> json.writeNumberField(path, (double) DOUBLE.convert(value));
+            case DECIMAL:
+            case TIME:
+            case DATE:
+            case TIMESTAMP:
+            case TIMESTAMP_WITH_TIME_ZONE:
+            case VARCHAR:
+                return (json, value) -> json.writeStringField(path, (String) VARCHAR.convert(value));
+            case OBJECT:
+                return (json, value) -> {
+                    json.writeFieldName(path);
+                    if (value instanceof TreeNode) {
+                        json.writeTree((TreeNode) value);
+                    } else if (value instanceof Map) {
+                        json.writeObject(value);
+                    } else if (value instanceof Boolean) {
+                        json.writeBoolean((boolean) value);
+                    } else if (value instanceof Byte) {
+                        json.writeNumber((byte) value);
+                    } else if (value instanceof Short) {
+                        json.writeNumber((short) value);
+                    } else if (value instanceof Integer) {
+                        json.writeNumber((int) value);
+                    } else if (value instanceof Long) {
+                        json.writeNumber((long) value);
+                    } else if (value instanceof Float) {
+                        json.writeNumber((float) value);
+                    } else if (value instanceof Double) {
+                        json.writeNumber((double) value);
+                    } else {
+                        json.writeString((String) VARCHAR.convert(value));
+                    }
+                };
+            default:
+                throw QueryException.error("Unsupported type: " + type);
         }
     }
 
@@ -125,8 +129,8 @@ class JsonUpsertTarget implements UpsertTarget {
     public void init() {
         baos.reset();
         try {
-            generator = JSON_FACTORY.createGenerator(baos);
-            generator.writeStartObject();
+            json = JSON_FACTORY.createGenerator(baos);
+            json.writeStartObject();
         } catch (IOException e) {
             throw sneakyThrow(e);
         }
@@ -135,8 +139,8 @@ class JsonUpsertTarget implements UpsertTarget {
     @Override
     public Object conclude() {
         try {
-            generator.writeEndObject();
-            generator.close();
+            json.writeEndObject();
+            json.close();
         } catch (IOException e) {
             throw sneakyThrow(e);
         }

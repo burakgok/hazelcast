@@ -16,35 +16,21 @@
 
 package com.hazelcast.jet.sql.impl.inject;
 
-import com.hazelcast.jet.impl.util.ReflectionUtils;
-import com.hazelcast.sql.impl.QueryException;
-import com.hazelcast.sql.impl.expression.RowValue;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.Map.Entry;
 
-import static com.hazelcast.jet.impl.util.ReflectionUtils.loadClass;
 import static com.hazelcast.jet.sql.impl.inject.UpsertInjector.FAILING_TOP_LEVEL_INJECTOR;
-import static com.hazelcast.jet.sql.impl.inject.UpsertTargetUtils.convertRowToJavaType;
-import static java.util.stream.Collectors.toMap;
 
 @NotThreadSafe
-class PojoUpsertTarget implements UpsertTarget {
+class PojoUpsertTarget extends AbstractPojoUpsertTarget {
     private final Class<?> typeClass;
-    private final Map<String, Class<?>> typesByPaths;
 
     private Object object;
 
-    PojoUpsertTarget(String className, Map<String, String> typeNamesByPaths) {
-        typeClass = loadClass(className);
-        typesByPaths = typeNamesByPaths.entrySet().stream()
-                .collect(toMap(Entry::getKey, e -> loadClass(e.getValue())));
+    PojoUpsertTarget(Class<?> typeClass) {
+        this.typeClass = typeClass;
     }
 
     @Override
@@ -52,59 +38,13 @@ class PojoUpsertTarget implements UpsertTarget {
         if (path == null) {
             return FAILING_TOP_LEVEL_INJECTOR;
         }
-
-        Method method = ReflectionUtils.findPropertySetter(typeClass, path, typesByPaths.get(path));
-        if (method != null) {
-            return value -> {
-                if (value == null && method.getParameterTypes()[0].isPrimitive()) {
-                    throw QueryException.error("Cannot pass NULL to a method with a primitive argument: " + method);
-                }
-                try {
-                    if (value instanceof RowValue) {
-                        method.invoke(object, convertRowToJavaType(value, type));
-                    } else {
-                        method.invoke(object, value);
-                    }
-                } catch (IllegalAccessException | InvocationTargetException e) {
-                    throw QueryException.error("Invocation of '" + method + "' failed: " + e, e);
-                }
-            };
-        }
-
-        Field field = ReflectionUtils.findPropertyField(typeClass, path);
-        if (field != null) {
-            return value -> {
-                if (value == null && field.getType().isPrimitive()) {
-                    throw QueryException.error("Cannot set NULL to a primitive field: " + field);
-                }
-                try {
-                    if (value instanceof RowValue) {
-                        field.set(object, convertRowToJavaType(value, type));
-                    } else {
-                        field.set(object, value);
-                    }
-                } catch (IllegalAccessException e) {
-                    throw QueryException.error("Failed to set field " + field + ": " + e, e);
-                }
-            };
-        }
-
-        return value -> {
-            if (value != null) {
-                throw QueryException.error("Cannot set property \"" + path + "\" to class "
-                        + typeClass.getName() + ": no set-method or public field available");
-            }
-        };
+        Injector<Object> injector = createInjector(typeClass, path, type);
+        return value -> injector.set(object, value);
     }
 
     @Override
     public void init() {
-        try {
-            object = typeClass.newInstance();
-        } catch (Exception e) {
-            throw QueryException.error("Unable to instantiate class \""
-                    + typeClass.getName() + "\" : " + e.getMessage(), e);
-        }
+        object = createObject(typeClass);
     }
 
     @Override

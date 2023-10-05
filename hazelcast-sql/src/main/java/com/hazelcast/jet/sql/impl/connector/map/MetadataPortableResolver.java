@@ -101,6 +101,11 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
             InternalSerializationService serializationService
     ) {
         Map<QueryPath, MappingField> fieldsByPath = extractFields(userFields, isKey);
+        for (QueryPath path : fieldsByPath.keySet()) {
+            if (path.isTopLevel()) {
+                throw QueryException.error("Cannot use the '" + path + "' field with Portable serialization");
+            }
+        }
 
         PortableId portableId = getSchemaId(fieldsByPath, PortableId::new, () -> portableId(options, isKey));
         ClassDefinition classDefinition = serializationService.getPortableContext()
@@ -133,14 +138,11 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
             @Nullable ClassDefinition classDefinition
     ) {
         if (classDefinition == null) {
-            // ClassDefinition does not exist, make sure there are no OBJECT fields
-            return fieldsByPath.values().stream()
-                    .peek(mappingField -> {
-                        QueryDataType type = mappingField.type();
-                        if (type.getTypeFamily().equals(QueryDataTypeFamily.OBJECT)) {
-                            throw QueryException.error("Cannot derive Portable type for '" + type.getTypeFamily() + "'");
-                        }
-                    });
+            return fieldsByPath.values().stream().peek(field -> {
+                if (field.type().getTypeFamily() == QueryDataTypeFamily.OBJECT && !field.type().isCustomType()) {
+                    throw QueryException.error("Cannot derive Portable type for '" + field.name() + ":OBJECT'");
+                }
+            });
         }
 
         for (String name : classDefinition.getFieldNames()) {
@@ -164,10 +166,6 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
     ) {
         Map<QueryPath, MappingField> fieldsByPath = extractFields(resolvedFields, isKey);
 
-        PortableId portableId = getSchemaId(fieldsByPath, PortableId::new, () -> portableId(options, isKey));
-        ClassDefinition classDefinition = resolveClassDefinition(portableId, getFields(fieldsByPath),
-                serializationService.getPortableContext());
-
         List<TableField> fields = new ArrayList<>();
         for (Entry<QueryPath, MappingField> entry : fieldsByPath.entrySet()) {
             QueryPath path = entry.getKey();
@@ -177,6 +175,10 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
             fields.add(new MapTableField(name, type, false, path));
         }
         maybeAddDefaultField(isKey, resolvedFields, fields, QueryDataType.OBJECT);
+
+        PortableId portableId = getSchemaId(fieldsByPath, PortableId::new, () -> portableId(options, isKey));
+        ClassDefinition classDefinition = resolveClassDefinition(portableId, getFields(fieldsByPath),
+                serializationService.getPortableContext());
 
         return new KvMetadata(
                 fields,
@@ -196,7 +198,7 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
             return classDefinition;
         }
 
-        return fields.reduce(new ClassDefinitionBuilder(portableId), (schema, field) -> {
+        classDefinition = fields.reduce(new ClassDefinitionBuilder(portableId), (schema, field) -> {
             switch (field.type().getTypeFamily()) {
                 case BOOLEAN:
                     return schema.addBooleanField(field.name());
@@ -225,10 +227,18 @@ public final class MetadataPortableResolver implements KvMetadataResolver {
                 case TIMESTAMP_WITH_TIME_ZONE:
                     return schema.addTimestampWithTimezoneField(field.name());
                 default:
-                    // validated earlier, skip whole __key & this
-                    return schema;
+                    if (field.type().isCustomType()) {
+                        PortableId fieldId = new PortableId(field.type().getObjectTypeMetadata());
+                        return schema.addPortableField(field.name(),
+                                resolveClassDefinition(fieldId, getFields(field.type()), context));
+                    } else {
+                        throw QueryException.error("Unsupported type: " + field.type());
+                    }
             }
         }, ExceptionUtil::notParallelizable).build();
+
+        context.registerClassDefinition(classDefinition);
+        return classDefinition;
     }
 
     public static PortableId portableId(Map<String, String> options, Boolean isKey) {

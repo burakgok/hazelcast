@@ -122,7 +122,7 @@ public class KvProjectorTest {
         assertThat(serialized).isEqualToComparingFieldByField(original);
     }
 
-    private static final class MultiplyingTarget implements UpsertTarget {
+    private static final class MultiplyingTarget extends UpsertTarget {
         private Object value = -1;
 
         @Override
@@ -141,7 +141,7 @@ public class KvProjectorTest {
         }
     }
 
-    private static final class NullTarget implements UpsertTarget {
+    private static final class NullTarget extends UpsertTarget {
 
         @Override
         public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {

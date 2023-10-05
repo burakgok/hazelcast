@@ -105,6 +105,11 @@ public final class KvMetadataAvroResolver implements KvMetadataResolver {
             throw QueryException.error("Column list is required for Avro format");
         }
         Map<QueryPath, MappingField> fieldsByPath = extractFields(userFields, isKey);
+        for (QueryPath path : fieldsByPath.keySet()) {
+            if (path.isTopLevel()) {
+                throw QueryException.error("Cannot use the '" + path + "' field with Avro serialization");
+            }
+        }
 
         Schema schema = getSchemaId(fieldsByPath, schemaJson -> {
             // HazelcastKafkaAvro[De]Serializer obtains the schema from mapping options
@@ -112,15 +117,10 @@ public final class KvMetadataAvroResolver implements KvMetadataResolver {
             return new Schema.Parser().parse(schemaJson);
         }, () -> inlineSchema(options, isKey));
 
-        if (schema != null && options.containsKey("schema.registry.url")) {
-            throw new IllegalArgumentException("Inline schema cannot be used with schema registry");
-        }
-        for (QueryPath path : fieldsByPath.keySet()) {
-            if (path.isTopLevel()) {
-                throw QueryException.error("Cannot use the '" + path + "' field with Avro serialization");
-            }
-        }
         if (schema != null) {
+            if (options.containsKey("schema.registry.url")) {
+                throw new IllegalArgumentException("Inline schema cannot be used with schema registry");
+            }
             validate(schema, getFields(fieldsByPath).collect(toList()));
         }
         return fieldsByPath.values().stream();
@@ -184,8 +184,7 @@ public final class KvMetadataAvroResolver implements KvMetadataResolver {
                     return schema.optionalString(field.name());
                 case OBJECT:
                     Schema fieldSchema = field.type().isCustomType()
-                            ? resolveSchema(field.type().getObjectTypeName(),
-                                    field.type().getObjectFields().stream().map(Field::new))
+                            ? resolveSchema(field.type().getObjectTypeName(), getFields(field.type()))
                             : Schemas.OBJECT_SCHEMA;
                     return optionalField(field.name(), fieldSchema).apply(schema);
                 default:
@@ -230,7 +229,7 @@ public final class KvMetadataAvroResolver implements KvMetadataResolver {
             }
 
             if (mappingFieldType.isCustomType()) {
-                validate(fieldSchema, mappingFieldType.getObjectFields().stream().map(Field::new).collect(toList()));
+                validate(fieldSchema, getFields(mappingFieldType).collect(toList()));
             }
         }
     }

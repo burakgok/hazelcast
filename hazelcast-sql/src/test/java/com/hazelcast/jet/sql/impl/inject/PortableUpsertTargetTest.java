@@ -48,7 +48,10 @@ public class PortableUpsertTargetTest {
 
     @Test
     public void test_set() throws IOException {
+        InternalSerializationService ss = new DefaultSerializationServiceBuilder().build();
         ClassDefinition innerClassDefinition = new ClassDefinitionBuilder(4, 5, 6).build();
+        ss.getPortableContext().registerClassDefinition(innerClassDefinition);
+
         ClassDefinition classDefinition =
                 new ClassDefinitionBuilder(1, 2, 3)
                         .addPortableField("null", innerClassDefinition)
@@ -69,7 +72,7 @@ public class PortableUpsertTargetTest {
                         .addTimestampWithTimezoneField("timestampTz")
                         .build();
 
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, ss);
         UpsertInjector nullFieldInjector = target.createInjector("null", QueryDataType.OBJECT);
         UpsertInjector objectFieldInjector = target.createInjector("object", QueryDataType.OBJECT);
         UpsertInjector stringFieldInjector = target.createInjector("string", QueryDataType.VARCHAR);
@@ -107,7 +110,6 @@ public class PortableUpsertTargetTest {
         timestampTzFieldInjector.set(OffsetDateTime.of(2021, 2, 9, 12, 23, 34, 200_000_000, UTC));
         Object portable = target.conclude();
 
-        InternalSerializationService ss = new DefaultSerializationServiceBuilder().build();
         InternalGenericRecord record = ss.readAsInternalGenericRecord(ss.toData(portable));
         assertThat(record.getGenericRecord("null")).isNull();
         assertThat(record.getGenericRecord("object"))
@@ -168,14 +170,13 @@ public class PortableUpsertTargetTest {
             Object defaultValue,
             Function<InternalGenericRecord, Object> valueExtractor
     ) {
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, null);
         UpsertInjector injector = target.createInjector("field", type);
 
         target.init();
-        injector.set(null);
-        assertThatThrownBy(target::conclude)
+        assertThatThrownBy(() -> injector.set(null))
                 .isInstanceOf(QueryException.class)
-                .hasMessageContaining("Cannot set value null");
+                .hasMessageContaining("Cannot set NULL to a primitive field");
     }
 
     @Test
@@ -187,7 +188,7 @@ public class PortableUpsertTargetTest {
             Object defaultValue,
             Function<InternalGenericRecord, Object> valueExtractor
     ) throws IOException {
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, null);
 
         target.init();
         Object portable = target.conclude();
@@ -286,14 +287,18 @@ public class PortableUpsertTargetTest {
             Object value,
             Function<InternalGenericRecord, Object> valueExtractor
     ) throws IOException {
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        InternalSerializationService ss = new DefaultSerializationServiceBuilder().build();
+        if (value instanceof GenericRecord) {
+            ClassDefinition innerClassDefinition = new ClassDefinitionBuilder(4, 5, 6).build();
+            ss.getPortableContext().registerClassDefinition(innerClassDefinition);
+        }
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, ss);
         UpsertInjector injector = target.createInjector("object", QueryDataType.OBJECT);
 
         target.init();
         injector.set(value);
         Object portable = target.conclude();
 
-        InternalSerializationService ss = new DefaultSerializationServiceBuilder().build();
         InternalGenericRecord record = ss.readAsInternalGenericRecord(ss.toData(portable));
         assertThat(valueExtractor.apply(record)).isEqualTo(value);
     }
@@ -306,7 +311,7 @@ public class PortableUpsertTargetTest {
             Object value,
             Function<InternalGenericRecord, Object> valueExtractor
     ) throws IOException {
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, null);
 
         target.init();
         Object portable = target.conclude();
@@ -320,7 +325,7 @@ public class PortableUpsertTargetTest {
     public void when_injectNonExistingPropertyValue_then_throws() {
         ClassDefinition classDefinition = new ClassDefinitionBuilder(1, 2, 3).build();
 
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, null);
         UpsertInjector injector = target.createInjector("field", QueryDataType.INT);
 
         target.init();
@@ -333,7 +338,7 @@ public class PortableUpsertTargetTest {
     public void when_injectNonExistingPropertyNullValue_then_succeeds() throws IOException {
         ClassDefinition classDefinition = new ClassDefinitionBuilder(1, 2, 3).build();
 
-        UpsertTarget target = new PortableUpsertTarget(classDefinition);
+        UpsertTarget target = new PortableUpsertTarget(classDefinition, null);
         UpsertInjector injector = target.createInjector("field", QueryDataType.INT);
 
         target.init();
