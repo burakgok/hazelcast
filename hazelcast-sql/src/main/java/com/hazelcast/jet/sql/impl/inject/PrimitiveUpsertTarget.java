@@ -23,11 +23,7 @@ import javax.annotation.concurrent.NotThreadSafe;
 
 @NotThreadSafe
 class PrimitiveUpsertTarget implements UpsertTarget {
-
     private Object object;
-
-    PrimitiveUpsertTarget() {
-    }
 
     @Override
     public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {

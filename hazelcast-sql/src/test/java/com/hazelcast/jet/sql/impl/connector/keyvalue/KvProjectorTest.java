@@ -123,12 +123,7 @@ public class KvProjectorTest {
     }
 
     private static final class MultiplyingTarget implements UpsertTarget {
-
-        private Object value;
-
-        private MultiplyingTarget() {
-            value = -1;
-        }
+        private Object value = -1;
 
         @Override
         public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {
@@ -150,13 +145,11 @@ public class KvProjectorTest {
 
         @Override
         public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {
-            return value -> {
-            };
+            return value -> { };
         }
 
         @Override
-        public void init() {
-        }
+        public void init() { }
 
         @Override
         public Object conclude() {

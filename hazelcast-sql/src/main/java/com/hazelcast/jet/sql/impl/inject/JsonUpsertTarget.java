@@ -34,14 +34,10 @@ import static com.hazelcast.jet.sql.impl.inject.UpsertInjector.FAILING_TOP_LEVEL
 
 @NotThreadSafe
 class JsonUpsertTarget implements UpsertTarget {
-
     private static final JsonFactory JSON_FACTORY = new ObjectMapper().getFactory();
 
     private final ByteArrayOutputStream baos = new ByteArrayOutputStream();
     private JsonGenerator generator;
-
-    JsonUpsertTarget() {
-    }
 
     @Override
     @SuppressWarnings("checkstyle:ReturnCount")

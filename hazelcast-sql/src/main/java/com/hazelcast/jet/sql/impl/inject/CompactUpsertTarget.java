@@ -25,7 +25,6 @@ import com.hazelcast.sql.impl.QueryException;
 import com.hazelcast.sql.impl.expression.RowValue;
 import com.hazelcast.sql.impl.type.QueryDataType;
 
-import javax.annotation.Nonnull;
 import javax.annotation.Nullable;
 import javax.annotation.concurrent.NotThreadSafe;
 import java.math.BigDecimal;
@@ -35,61 +34,60 @@ import java.time.LocalTime;
 import java.time.OffsetDateTime;
 
 import static com.hazelcast.jet.sql.impl.inject.UpsertInjector.FAILING_TOP_LEVEL_INJECTOR;
+import static com.hazelcast.jet.sql.impl.inject.UpsertTargetUtils.convertRowToCompactType;
 
 @NotThreadSafe
 class CompactUpsertTarget implements UpsertTarget {
-
     private final Schema schema;
 
-    private GenericRecordBuilder builder;
+    private GenericRecordBuilder record;
 
-    CompactUpsertTarget(@Nonnull Schema schema) {
+    CompactUpsertTarget(Schema schema) {
         this.schema = schema;
     }
 
     @Override
     @SuppressWarnings("checkstyle:ReturnCount")
-    public UpsertInjector createInjector(@Nullable String path, QueryDataType queryDataType) {
+    public UpsertInjector createInjector(@Nullable String path, QueryDataType type) {
         if (path == null) {
             return FAILING_TOP_LEVEL_INJECTOR;
         }
-        boolean hasField = schema.hasField(path);
-        if (!hasField) {
+        if (!schema.hasField(path)) {
             return value -> {
-                throw QueryException.error("Field \"" + path + "\" doesn't exist in Compact Schema");
+                throw QueryException.error("Field \"" + path + "\" doesn't exist in Compact schema");
             };
         }
 
         FieldKind kind = schema.getField(path).getKind();
         switch (kind) {
             case STRING:
-                return value -> builder.setString(path, (String) value);
+                return value -> record.setString(path, (String) value);
             case NULLABLE_BOOLEAN:
-                return value -> builder.setNullableBoolean(path, (Boolean) value);
+                return value -> record.setNullableBoolean(path, (Boolean) value);
             case NULLABLE_INT8:
-                return value -> builder.setNullableInt8(path, (Byte) value);
+                return value -> record.setNullableInt8(path, (Byte) value);
             case NULLABLE_INT16:
-                return value -> builder.setNullableInt16(path, (Short) value);
+                return value -> record.setNullableInt16(path, (Short) value);
             case NULLABLE_INT32:
-                return value -> builder.setNullableInt32(path, (Integer) value);
+                return value -> record.setNullableInt32(path, (Integer) value);
             case NULLABLE_INT64:
-                return value -> builder.setNullableInt64(path, (Long) value);
+                return value -> record.setNullableInt64(path, (Long) value);
             case DECIMAL:
-                return value -> builder.setDecimal(path, (BigDecimal) value);
+                return value -> record.setDecimal(path, (BigDecimal) value);
             case NULLABLE_FLOAT32:
-                return value -> builder.setNullableFloat32(path, (Float) value);
+                return value -> record.setNullableFloat32(path, (Float) value);
             case NULLABLE_FLOAT64:
-                return value -> builder.setNullableFloat64(path, (Double) value);
+                return value -> record.setNullableFloat64(path, (Double) value);
             case TIME:
-                return value -> builder.setTime(path, (LocalTime) value);
+                return value -> record.setTime(path, (LocalTime) value);
             case DATE:
-                return value -> builder.setDate(path, (LocalDate) value);
+                return value -> record.setDate(path, (LocalDate) value);
             case TIMESTAMP:
-                return value -> builder.setTimestamp(path, (LocalDateTime) value);
+                return value -> record.setTimestamp(path, (LocalDateTime) value);
             case TIMESTAMP_WITH_TIMEZONE:
-                return value -> builder.setTimestampWithTimezone(path, (OffsetDateTime) value);
+                return value -> record.setTimestampWithTimezone(path, (OffsetDateTime) value);
             case COMPACT:
-                return createRowValueInjector(path, queryDataType);
+                return value -> record.setGenericRecord(path, convertRowToCompactType((RowValue) value, type));
             default:
                 throw QueryException.error(kind + " kind is not supported in SQL with Compact format!");
         }
@@ -97,19 +95,13 @@ class CompactUpsertTarget implements UpsertTarget {
 
     @Override
     public void init() {
-        this.builder = new DeserializedSchemaBoundGenericRecordBuilder(schema);
+        record = new DeserializedSchemaBoundGenericRecordBuilder(schema);
     }
 
     @Override
     public Object conclude() {
-        GenericRecord record = builder.build();
-        builder = null;
+        GenericRecord record = this.record.build();
+        this.record = null;
         return record;
-    }
-
-    private UpsertInjector createRowValueInjector(String path, QueryDataType targetDataType) {
-        return value -> {
-            builder.setGenericRecord(path, UpsertTargetUtils.convertRowToCompactType((RowValue) value, targetDataType));
-        };
     }
 }

@@ -28,13 +28,13 @@ public class HazelcastObjectUpsertTargetDescriptor implements UpsertTargetDescri
     public HazelcastObjectUpsertTargetDescriptor() { }
 
     @Override
-    public UpsertTarget create(final InternalSerializationService serializationService) {
+    public UpsertTarget create(InternalSerializationService serializationService) {
         return new HazelcastObjectUpsertTarget();
     }
 
     @Override
-    public void writeData(final ObjectDataOutput out) throws IOException { }
+    public void writeData(ObjectDataOutput out) throws IOException { }
 
     @Override
-    public void readData(final ObjectDataInput in) throws IOException { }
+    public void readData(ObjectDataInput in) throws IOException { }
 }

@@ -70,7 +70,7 @@ class PortableUpsertTarget implements UpsertTarget {
 
         return value -> {
             if (fieldIndex == -1 && value != null) {
-                throw QueryException.error("Field \"" + path + "\" doesn't exist in Portable Class Definition");
+                throw QueryException.error("Field \"" + path + "\" doesn't exist in Portable class definition");
             }
 
             if (fieldIndex > -1) {
