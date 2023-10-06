@@ -17,9 +17,11 @@
 package com.hazelcast.jet.sql.impl.inject;
 
 import com.hazelcast.internal.serialization.InternalSerializationService;
+import com.hazelcast.jet.sql.impl.extract.AvroQueryTarget;
 import com.hazelcast.query.impl.getters.Extractors;
 import com.hazelcast.sql.impl.expression.RowValue;
 import com.hazelcast.sql.impl.type.QueryDataType;
+import org.apache.avro.generic.GenericRecord;
 
 import javax.annotation.Nullable;
 import java.util.List;
@@ -44,6 +46,8 @@ public abstract class UpsertTarget {
         if (value instanceof RowValue) {
             List<Object> values = ((RowValue) value).getValues();
             return (i, name) -> values.get(i);
+        } else if (value instanceof GenericRecord) {
+            return (i, name) -> AvroQueryTarget.extractValue((GenericRecord) value, name);
         } else {
             return (i, name) -> extractors.extract(value, name, null);
         }
