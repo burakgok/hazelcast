@@ -457,22 +457,20 @@ public class JdbcSqlConnector implements SqlConnector {
             context.getDag().edge(Edge.between(v, dmlVertex));
             return dmlVertex;
         } else {
-            Vertex dmlVertex = context.getDag().newUniqueVertex(
+            return context.getDag().newUniqueVertex(
                     statement + "(" + table.getExternalNameList() + ")",
                     processorSupplier
             ).localParallelism(1);
-            return dmlVertex;
         }
     }
 
     private static Vertex dummySourceVertex(DagBuildContext context, String name, Address localAddress) {
-        Vertex v = context.getDag().newUniqueVertex(name,
+        return context.getDag().newUniqueVertex(name,
                 forceTotalParallelismOne(
                         of(() -> new SingleItemSourceP<>(DUMMY_INPUT_ROW)),
                         localAddress
                 )
         );
-        return v;
     }
 
     @Nonnull

@@ -16,7 +16,6 @@
 
 package com.hazelcast.jet.sql.impl.connector.map;
 
-import com.google.common.collect.ImmutableMap;
 import com.hazelcast.jet.config.JobConfig;
 import com.hazelcast.jet.core.test.TestSupport;
 import com.hazelcast.jet.impl.memory.AccumulationLimitExceededException;
@@ -38,14 +37,11 @@ import static com.hazelcast.jet.TestContextSupport.adaptSupplier;
 import static com.hazelcast.jet.impl.JetServiceBackend.SQL_ARGUMENTS_KEY_NAME;
 import static com.hazelcast.query.impl.predicates.PredicateTestUtils.entry;
 import static com.hazelcast.sql.impl.type.QueryDataType.INT;
-import static java.util.Arrays.asList;
 import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 public class InsertProcessorTest extends SqlTestSupport {
-
     private static final String MAP_NAME = "map";
 
     private Map<Object, Object> map;
@@ -62,53 +58,53 @@ public class InsertProcessorTest extends SqlTestSupport {
 
     @Test
     public void test_insert() {
-        executeInsert(singletonList(jetRow(1, 1)), singletonList(jetRow(1L)));
+        executeInsert(List.of(jetRow(1, 1)), List.of(jetRow(1L)));
         assertThat(map).containsExactly(entry(1, 1));
     }
 
     @Test
     public void test_multiInsert() {
-        executeInsert(asList(jetRow(1, 1), jetRow(2, 2)), singletonList(jetRow(2L)));
-        assertThat(map).containsExactlyInAnyOrderEntriesOf(ImmutableMap.of(1, 1, 2, 2));
+        executeInsert(List.of(jetRow(1, 1), jetRow(2, 2)), List.of(jetRow(2L)));
+        assertThat(map).containsExactlyInAnyOrderEntriesOf(Map.of(1, 1, 2, 2));
     }
 
     @Test
     public void test_noInput() {
-        executeInsert(emptyList(), singletonList(jetRow(0L)));
+        executeInsert(emptyList(), List.of(jetRow(0L)));
         assertThat(map).isEmpty();
     }
 
     @Test
     public void when_keyIsNull_then_fail() {
-        assertThatThrownBy(() -> executeInsert(singletonList(jetRow(null, 1)), emptyList()))
+        assertThatThrownBy(() -> executeInsert(List.of(jetRow(null, 1)), emptyList()))
                 .isInstanceOf(QueryException.class)
                 .hasMessageContaining("Cannot write NULL to '__key' field");
     }
 
     @Test
     public void when_ValueIsNull_then_fail() {
-        assertThatThrownBy(() -> executeInsert(singletonList(jetRow(1, null)), emptyList()))
+        assertThatThrownBy(() -> executeInsert(List.of(jetRow(1, null)), emptyList()))
                 .isInstanceOf(QueryException.class)
                 .hasMessageContaining("Cannot write NULL to 'this' field");
     }
 
     @Test
     public void when_keyAlreadyExists_then_fail() {
-        assertThatThrownBy(() -> executeInsert(() -> map.put(1, 1), singletonList(jetRow(1, 2)), emptyList()))
+        assertThatThrownBy(() -> executeInsert(() -> map.put(1, 1), List.of(jetRow(1, 2)), emptyList()))
                 .isInstanceOf(QueryException.class)
                 .hasMessageContaining("Duplicate key");
     }
 
     @Test
     public void when_attemptsToInsertDuplicateKey_then_fail() {
-        assertThatThrownBy(() -> executeInsert(asList(jetRow(1, 1), jetRow(1, 2)), emptyList()))
+        assertThatThrownBy(() -> executeInsert(List.of(jetRow(1, 1), jetRow(1, 2)), emptyList()))
                 .isInstanceOf(QueryException.class)
                 .hasMessageContaining("Duplicate key");
     }
 
     @Test
     public void when_maxAccumulatedKeysCountIsExceeded_then_fail() {
-        assertThatThrownBy(() -> executeInsert(1, asList(jetRow(1, 1), jetRow(2, 2)), emptyList()))
+        assertThatThrownBy(() -> executeInsert(1, List.of(jetRow(1, 1), jetRow(2, 2)), emptyList()))
                 .isInstanceOf(AccumulationLimitExceededException.class);
     }
 

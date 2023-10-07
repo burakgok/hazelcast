@@ -59,8 +59,7 @@ public class SelectProcessorSupplier
     private String dialectName;
 
     @SuppressWarnings("unused")
-    public SelectProcessorSupplier() {
-    }
+    public SelectProcessorSupplier() { }
 
     public SelectProcessorSupplier(@Nonnull String dataConnectionName,
                                    @Nonnull String query,
@@ -88,8 +87,8 @@ public class SelectProcessorSupplier
                 (connection, parallelism, index) -> {
                     PreparedStatement statement = connection.prepareStatement(query);
                     List<Object> arguments = evalContext.getArguments();
-                    for (int j = 0; j < parameterPositions.length; j++) {
-                        statement.setObject(j + 1, arguments.get(parameterPositions[j]));
+                    for (int i = 0; i < parameterPositions.length; i++) {
+                        statement.setObject(i + 1, arguments.get(parameterPositions[i]));
                     }
                     try {
                         ResultSet rs = statement.executeQuery();
@@ -103,11 +102,9 @@ public class SelectProcessorSupplier
                 (rs) -> {
                     int columnCount = rs.getMetaData().getColumnCount();
                     Object[] row = new Object[columnCount];
-                    for (int j = 0; j < columnCount; j++) {
-                        Object value = valueGetters[j].apply(rs, j + 1);
-                        row[j] = value;
+                    for (int i = 0; i < columnCount; i++) {
+                        row[i] = valueGetters[i].apply(rs, i + 1);
                     }
-
                     return new JetSqlRow(evalContext.getSerializationService(), row);
                 }
         );

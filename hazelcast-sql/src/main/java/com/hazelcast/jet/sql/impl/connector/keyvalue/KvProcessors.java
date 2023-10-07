@@ -38,14 +38,11 @@ import java.util.Collection;
 import java.util.List;
 
 public final class KvProcessors {
-
-    private KvProcessors() {
-    }
+    private KvProcessors() { }
 
     /**
      * Returns a supplier of processors that convert a row represented as
-     * {@link JetSqlRow} to an entry represented as {@code Entry<Object,
-     * Object>}.
+     * {@link JetSqlRow} to an entry represented as {@code Entry<Object, Object>}.
      */
     public static ProcessorSupplier entryProjector(
             QueryPath[] paths,
@@ -68,14 +65,12 @@ public final class KvProcessors {
             justification = "the class is never java-serialized"
     )
     private static final class EntryProjectorProcessorSupplier implements ProcessorSupplier, DataSerializable {
-
         private KvProjector.Supplier projectorSupplier;
 
         private transient InternalSerializationService serializationService;
 
         @SuppressWarnings("unused")
-        private EntryProjectorProcessorSupplier() {
-        }
+        private EntryProjectorProcessorSupplier() { }
 
         EntryProjectorProcessorSupplier(KvProjector.Supplier projectorSupplier) {
             this.projectorSupplier = projectorSupplier;
